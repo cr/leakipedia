@@ -1,0 +1,205 @@
+#!/bin/bash
+# leakipedia v1.0
+# by Christiane Ruetten cr@23bit.net
+# licensed under GPLv2
+# see http://www.gnu.org/licenses/gpl-2.0.html
+
+#Changelog:
+# 2010-12-08 cr - Merged tools into one script
+# 2010-12-09 cr - Release v1.0
+
+
+
+# GeoIP support requires GeoIP perl module
+# GeoIP database to use
+GEOIP_DB="/usr/share/GeoIP/GeoLiteCity.dat"
+
+
+
+(( $DEBUG )) && shopt -s extdebug
+
+# functions ################################################
+
+print_usage () {
+  echo "usage: $(basename "$0") [-d <db-file>] [-g] [-l <language>] <command>"
+  echo "  commands: build ip country city domain"
+}
+
+ipextract () {
+  perl -e '
+    while (<>) { 
+      print "$1\n" if /\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})<\/a>/;
+    }
+  '
+}
+
+getips () {
+  # stdin: list of wikipedia topics in url format
+  tr ' ' \\012 | while read topic
+  do
+    wpurl="http://${wp_lang}.wikipedia.org/w/index.php?title=${topic}&limit=10000&action=history"
+    wget "$wpurl" -O - | ipextract
+  done
+}
+
+justdomains () {
+  perl -e '
+    while (<>) {
+      s/[^\.]+\.(.+\..+)/$1/ unless /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+      print;
+    }
+  '
+}
+
+iplookup () {
+  perl -e '
+    use Getopt::Std;
+    use Socket;
+
+    my %hostnames;
+
+    getopts ("ic");
+    # -i: add ip in brackets (hostname[ip])
+    # -d: direct resolve, do NOT use caching
+
+    sub hostname {
+      $host = $_[0];
+      if ($opt_d) {
+        unless (exists $hostname{$host}) {
+          $name = gethostbyaddr(inet_aton($host), AF_INET);
+          $hostname{$host} = (! $name) ? $host : ($opt_i ? "$name\[$host\]": $name); 
+        }
+        return $hostname{$host};
+      } else {
+        $name = gethostbyaddr(inet_aton($host), AF_INET);
+        return (! $name) ? $host : ($opt_i ? "$name\[$host\]": $name);
+      }
+    }
+
+    while (<>) {
+      s/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/&hostname($1)/ge;
+      print;
+    }
+  ' -- "$@"
+}
+
+geoip () {
+  perl -e '
+    sub unk {
+      return $_[0] ? $_[0] : "# unknown #";
+    }
+    use Geo::IP;
+    my $geo = Geo::IP->open("'$GEOIP_DB'", GEOIP_STANDARD);
+    while (<>) {
+      chomp;
+      my $res = $geo->record_by_name($_);
+      if( $res ) {
+      print unk($res->country_code), "\t", unk($res->city), "\t",
+            unk($res->latitude), "\t", unk($res->longitude), "\n";
+      }
+    }
+  ' -- "$@"
+}
+
+cleanup () {
+  #[ -e "$wp_tmp" ] && rm -rf "$wp_tmp"
+  echo
+}
+
+
+# default options ##########################################
+wp_tmp="/tmp/$(basename $0)$RANDOM$RANDOM"
+[ -d /dev/shm/ ] && wp_tmp="/dev/shm/$(basename $0)$RANDOM$RANDOM"
+wp_dbfile="leakipedia.db"
+wp_geoip=0
+wp_lang='en'
+
+# command line parsing #####################################
+typeset -i argstart=1
+while getopts "d:gl:" flag
+do
+  case $flag in
+    d)
+	wp_dbfile="$OPTARG"
+	argstart=$OPTIND
+	;;
+    g)
+	wp_geoip=1
+	argstart=$OPTIND
+	;;
+    l)
+	wp_lang="$OPTARG"
+	argstart=$OPTIND
+	;;
+    *)
+	print_usage
+        exit 1
+        ;;
+  esac
+done
+
+# last argument is command
+command=${!argstart}
+if [ -z "$command" ]
+then
+  command='help'
+else
+  argstart=($argstart+1)
+fi
+
+(($DEBUG)) && for i in ${!wp_*} ; do echo '$'$i=${!i} ; done
+
+
+# main #####################################################
+
+mkdir -p "$wp_tmp"
+trap cleanup 0 1
+
+case "$command" in
+
+  build)
+	getips | sort -nt. >"$wp_tmp/ips"
+	iplookup <"$wp_tmp/ips" >"$wp_tmp/names"
+	(( $wp_geoip )) && geoip <"$wp_tmp/ips" >"$wp_tmp/geo"
+	exec 7<"$wp_tmp/ips"
+	exec 8<"$wp_tmp/names"
+	(( $wp_geoip )) && exec 9<"$wp_tmp/geo"
+	
+	while read -u 7 ip
+	do
+	  read -u 8 name
+	  (( $wp_geoip )) && IFS='	' read -u 9 country city lat long
+	  echo -e "$ip\t$name\t$country\t$country-$city\t$lat\t$long"
+	done >"$wp_dbfile"
+	;;
+
+  ip)
+    cat "$wp_dbfile" \
+      | cut -f 1 \
+      | sort -n \
+      | uniq -c \
+      | sort -nr \
+      | iplookup -i
+    ;;
+
+  country)
+    cat "$wp_dbfile" \
+      | cut -f 3 | sort | uniq -c | sort -nr | iplookup -i
+    ;;
+
+  city)
+    cat "$wp_dbfile" \
+      | cut -f 3-4 | sort | uniq -c | sort -nr | iplookup -i
+    ;;
+
+  domain)
+    cat "$wp_dbfile" \
+      | cut -f 2 | justdomains | sort | uniq -c | sort -nr
+    ;;
+
+  *)
+    print_usage
+    ;;
+
+esac
+

@@ -1,0 +1,57 @@
+leakipedia
+
+Analyze anonymous Wikipedia edits
+by Christiane Ruetten, cr@23bit.net
+This release is GPLv2.
+
+
+
+Installation:
+
+To build databases with GeoIP information, leakipedia requires
+the Geo::IP perl module. On a Debian system with a configured
+CPAN setup, installation as root is
+
+# aptitude install geoip-bin libgeoip-dev
+# perl -MCPAN -e 'install Geo::IP'
+
+cave: The current Geo::IP module requires at leas libgeoip
+version 1.4.5. To install a backport to Debian lenny,
+add the line
+
+deb http://www.backports.org/debian lenny-backports main
+
+to /etc/apt/sources.list and install with:
+ 
+aptitude -t lenny-backports install geoip-bin libgeoip-dev
+
+Free GeoIP-Databases can be downloaded from
+http://www.maxmind.com/download/geoip/database/
+
+For example, use
+
+# mkdir -p /usr/share/GeoIP
+# wget http://geolite.maxmind.com/download/geoip/database/GeoLiteCity.dat.gz -O - | gzip -d >/usr/share/GeoIP/GeoLiteCity.dat
+
+Set the GEOIP_DB variable at the beginning of the leakipedia
+script to the full path of the downloaded file.
+
+
+Usage examples:
+
+- Show brief usage info
+  ./leakipedia help
+
+- Collect data from English Wikipedia (default), using test.db as
+  database and adding GeoIP information:
+  echo "Wikileaks Cablegate Assange" | ./leakipedia -d test.db -g build
+
+  cave: Use precise URL format of the targeted Wikipedia pages,
+        for example "Responsibility_for_the_September_11%2C_2001_attacks"
+
+- Show edits by IP addresses, resolve to hostnames
+  ./leakipedia -d test.db ip
+
+- Show edits by domain names
+  ./leakipedia -d test.db domain
+
