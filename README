@@ -15,7 +15,7 @@ CPAN setup, installation as root is
 # aptitude install geoip-bin libgeoip-dev
 # perl -MCPAN -e 'install Geo::IP'
 
-cave: The current Geo::IP module requires at leas libgeoip
+cave: The current Geo::IP module requires at least libgeoip
 version 1.4.5. To install a backport to Debian lenny,
 add the line
 
@@ -25,7 +25,7 @@ to /etc/apt/sources.list and install with:
  
 aptitude -t lenny-backports install geoip-bin libgeoip-dev
 
-Free GeoIP-Databases can be downloaded from
+Free GeoIP databases can be downloaded from
 http://www.maxmind.com/download/geoip/database/
 
 For example, use
