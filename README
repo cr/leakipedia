@@ -44,7 +44,7 @@ Usage examples:
 
 - Collect data from English Wikipedia (default), using test.db as
   database and adding GeoIP information:
-  echo "Wikileaks Cablegate Assange" | ./leakipedia -d test.db -g build
+  echo "Wikileaks United_States_diplomatic_cables_leak" | ./leakipedia -d test.db -g build
 
   cave: Use precise URL format of the targeted Wikipedia pages,
         for example "Responsibility_for_the_September_11%2C_2001_attacks"
